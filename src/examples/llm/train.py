@@ -8,7 +8,6 @@ Launch this with torchrun:
 
 import argparse
 import logging
-import os
 import sys
 from dataclasses import dataclass
 from typing import List, Optional, cast
@@ -17,6 +16,7 @@ import rich
 
 from olmo_core.config import Config, DType
 from olmo_core.data import (
+    DataMix,
     NumpyDataLoaderConfig,
     NumpyFSLDatasetConfig,
     NumpyPaddedFSLDatasetConfig,
@@ -50,34 +50,6 @@ from olmo_core.train.train_module import (
 from olmo_core.utils import seed_all
 
 log = logging.getLogger(__name__)
-
-# Check for the data on common Ai2 drives. If those don't exist we'll stream the data over the internet,
-# which can be a lot slower. Alternatively you can download the files with wget, for example:
-#  > wget http://olmo-data.org/examples/c4-en/gpt2/c4-train.00000-00099.npy
-DEFAULT_DATA_ROOT = "http://olmo-data.org/examples/c4-en/gpt2"
-for dir in (
-    "/net/nfs/allennlp/llm-data/c4/en/",
-    "/weka/oe-training-default/ai2-llm/examples/c4-en/gpt2/",
-):
-    if os.path.exists(dir):
-        DEFAULT_DATA_ROOT = dir
-        break
-DATA_ROOT = os.environ.get("OLMO_DATA_ROOT", DEFAULT_DATA_ROOT).rstrip("/")
-DATA_PATHS = [
-    f"{DATA_ROOT}/c4-train.00000-00099.npy",
-    # Uncomment for full dataset which might not be available on NFS or Weka.
-    #  f"{DATA_ROOT}/c4-train.00100-00199.npy",
-    #  f"{DATA_ROOT}/c4-train.00200-00299.npy",
-    #  f"{DATA_ROOT}/c4-train.00300-00399.npy",
-    #  f"{DATA_ROOT}/c4-train.00400-00499.npy",
-    #  f"{DATA_ROOT}/c4-train.00500-00599.npy",
-    #  f"{DATA_ROOT}/c4-train.00600-00699.npy",
-    #  f"{DATA_ROOT}/c4-train.00700-00799.npy",
-    #  f"{DATA_ROOT}/c4-train.00800-00899.npy",
-    #  f"{DATA_ROOT}/c4-train.00900-00999.npy",
-    #  f"{DATA_ROOT}/c4-train.01000-01023.npy",
-]
-EVAL_DATA_PATHS = [f"{DATA_ROOT}/c4-validation.00000-00008.npy"]
 
 
 # docs: start-define-config
@@ -148,7 +120,7 @@ def build_config(opts, overrides: List[str]) -> ExperimentConfig:
     if not work_dir:
         work_dir = "/tmp/dataset-cache"
 
-    tokenizer_config = TokenizerConfig.gpt2()
+    tokenizer_config = TokenizerConfig.dolma2()
 
     # docs: start-model-config
     try:
@@ -160,9 +132,9 @@ def build_config(opts, overrides: List[str]) -> ExperimentConfig:
     )
     # docs: end-model-config
 
-    log.info(f"Using data root: {DATA_ROOT}")
     dataset_config = NumpyFSLDatasetConfig(
-        paths=DATA_PATHS,
+        mix=DataMix.OLMo_mix_0625_150Bsample,
+        mix_base_dir="https://olmo-data.org",
         sequence_length=opts.sequence_length,
         tokenizer=tokenizer_config,
         work_dir=work_dir,
@@ -229,8 +201,8 @@ def build_config(opts, overrides: List[str]) -> ExperimentConfig:
             "lm_evaluator",
             LMEvaluatorCallbackConfig(
                 eval_dataset=NumpyPaddedFSLDatasetConfig(
-                    paths=EVAL_DATA_PATHS,
-                    metadata=[{"label": "c4-validation"}],
+                    mix=DataMix.v3_small_ppl_validation,
+                    mix_base_dir="https://olmo-data.org",
                     sequence_length=opts.sequence_length,
                     tokenizer=tokenizer_config,
                     work_dir=work_dir,
